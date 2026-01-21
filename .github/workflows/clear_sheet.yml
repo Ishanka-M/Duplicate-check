@@ -1,11 +1,11 @@
-name: Clear Google Sheet Daily
+name: Daily Sheet Backup and Clear
 on:
   schedule:
-    - cron: '0 0 * * *' # ලංකාවේ වෙලාවෙන් පාන්දර 5:30 (UTC 00:00) 
-  workflow_dispatch: # ඕනෑම වෙලාවක manual run කරන්නත් පුළුවන්
+    - cron: '0 0 * * *' # UTC midnight (ලංකාවේ වෙලාවෙන් පාන්දර 5:30)
+  workflow_dispatch: # Manual run කිරීම සඳහා
 
 jobs:
-  clear-sheet:
+  backup-and-clear:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -16,18 +16,56 @@ jobs:
           python-version: '3.x'
       - name: Install dependencies
         run: pip install gspread google-auth
-      - name: Run Clear Script
+      - name: Run Backup and Clear Script
         env:
           GCP_JSON: ${{ secrets.GCP_JSON }}
         run: |
           python -c "
           import gspread, os, json
           from google.oauth2.service_account import Credentials
+          from datetime import datetime
+
+          # --- SETUP ---
           info = json.loads(os.environ['GCP_JSON'])
           creds = Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/spreadsheets'])
           client = gspread.authorize(creds)
-          sheet = client.open('Your_Google_Sheet_Name').sheet1
-          header = sheet.row_values(1)
-          sheet.clear()
-          sheet.append_row(header) # Header එක විතරක් ඉතිරි කර අනෙක්වා මැකීම
+          
+          # Sheet එක සම්බන්ධ කරගැනීම
+          SPREADSHEET_NAME = 'streamlit_DB'
+          MAIN_WORKSHEET = 'Sheet1'
+          
+          try:
+              spreadsheet = client.open(SPREADSHEET_NAME)
+              source_sheet = spreadsheet.worksheet(MAIN_WORKSHEET)
+              
+              # --- BACKUP PROCESS ---
+              print('Reading data for backup...')
+              data = source_sheet.get_all_values()
+              
+              # Header එකට අමතරව දත්ත තිබේ නම් පමණක් Backup කිරීම
+              if len(data) > 1:
+                  today_str = datetime.now().strftime('%Y-%m-%d')
+                  backup_sheet_name = f'Backup_{today_str}'
+                  
+                  try:
+                      # අලුත් Worksheet එකක් සාදා දත්ත ඇතුළත් කිරීම
+                      backup_sheet = spreadsheet.add_worksheet(title=backup_sheet_name, rows=len(data)+10, cols=len(data[0])+5)
+                      backup_sheet.update(data)
+                      print(f'✅ Backup created successfully: {backup_sheet_name}')
+                  except gspread.exceptions.APIError as e:
+                      print(f'⚠️ Backup sheet might already exist for today or error: {e}. Skipping backup creation.')
+
+                  # --- CLEAR PROCESS ---
+                  # ප්‍රධාන sheet එක clear කර header එක නැවත දැමීම
+                  header = data[0]
+                  source_sheet.clear()
+                  source_sheet.append_row(header)
+                  print(f'✅ {MAIN_WORKSHEET} cleared successfully (Header preserved).')
+                  
+              else:
+                  print('ℹ️ No data found to backup. Sheet is already empty.')
+
+          except Exception as e:
+              print(f'❌ An error occurred: {e}')
+              exit(1) # Mark action as failed
           "
