@@ -36,7 +36,7 @@ with st.spinner('Connecting to Google Sheets...'):
 
 # --- UI HEADER ---
 st.title("📦 Picking Verification System")
-st.markdown("Isanka Madusanka | Verification Portal")
+st.markdown("Verification Portal")
 st.markdown("---")
 
 # --- FILE UPLOADER ---
