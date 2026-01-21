@@ -120,6 +120,6 @@ st.markdown("""
     }
     </style>
     <div class="footer">
-        Developed by Ishanka Madusanka | 2024
+        Developed by Ishanka Madusanka | 2026
     </div>
     """, unsafe_allow_html=True)
