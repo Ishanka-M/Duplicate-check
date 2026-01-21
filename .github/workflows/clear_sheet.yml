@@ -1,0 +1,33 @@
+name: Clear Google Sheet Daily
+on:
+  schedule:
+    - cron: '0 0 * * *' # ලංකාවේ වෙලාවෙන් පාන්දර 5:30 (UTC 00:00) 
+  workflow_dispatch: # ඕනෑම වෙලාවක manual run කරන්නත් පුළුවන්
+
+jobs:
+  clear-sheet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: pip install gspread google-auth
+      - name: Run Clear Script
+        env:
+          GCP_JSON: ${{ secrets.GCP_JSON }}
+        run: |
+          python -c "
+          import gspread, os, json
+          from google.oauth2.service_account import Credentials
+          info = json.loads(os.environ['GCP_JSON'])
+          creds = Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/spreadsheets'])
+          client = gspread.authorize(creds)
+          sheet = client.open('Your_Google_Sheet_Name').sheet1
+          header = sheet.row_values(1)
+          sheet.clear()
+          sheet.append_row(header) # Header එක විතරක් ඉතිරි කර අනෙක්වා මැකීම
+          "
