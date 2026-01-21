@@ -1,0 +1,7 @@
+[theme]
+base="dark"
+primaryColor="#00adb5"  # Button සහ highlight color එක (Teal වගේ පාටක්)
+backgroundColor="#222831" # පසුබිම් වර්ණය (තද අළු/කළු)
+secondaryBackgroundColor="#393e46" # Sidebar සහ input box වල පාට
+textColor="#eeeeee" # අකුරු වල පාට
+font="sans serif"
