@@ -43,7 +43,7 @@ with col_logo:
     st.image("image_0.png", width=120)
 with col_title:
     st.title("📦 Picking Verification System")
-    st.write("Isanka Madusanka | Verification Portal")
+    st.write("Verification Portal")
 
 st.markdown("---")
 
@@ -128,6 +128,6 @@ if uploaded_file:
 # --- FOOTER ---
 st.markdown(f"""
     <div class="footer">
-        Developed by Ishanka Madusanka | 2024
+        Developed by Ishanka Madusanka | 2026
     </div>
     """, unsafe_allow_html=True)
