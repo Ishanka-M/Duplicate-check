@@ -6,128 +6,144 @@ import io
 import time
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Picking Verification System", page_icon="📦", layout="wide")
+st.set_page_config(page_title="EFL Picking Verification", page_icon="📦", layout="wide")
 
-# --- CUSTOM CSS FOR LOGO & FOOTER ---
+# --- CUSTOM CSS FOR BETTER UI ---
 st.markdown("""
     <style>
-    .main-header {
-        display: flex;
-        align-items: center;
-        gap: 20px;
-    }
-    .footer {
-        position: fixed;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        background-color: #222831;
-        color: #888888;
-        text-align: center;
-        padding: 10px;
-        font-size: 12px;
-        z-index: 100;
-    }
+    .stDataFrame { border: 1px solid #393e46; border-radius: 10px; }
+    .footer { position: fixed; left: 0; bottom: 0; width: 100%; background-color: #222831; color: #888888; text-align: center; padding: 10px; font-size: 12px; z-index: 100; }
+    .metric-card { background-color: #1e2129; padding: 15px; border-radius: 10px; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR LOGO ---
-st.sidebar.image("image_0.png", use_container_width=True)
-st.sidebar.markdown("---")
-st.sidebar.info("EFL Logistics Verification Portal")
+# --- GOOGLE SHEETS CONNECTION ---
+scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
-# --- MAIN HEADER WITH LOGO ---
-col_logo, col_title = st.columns([0.15, 0.85])
-with col_logo:
-    # ප්‍රධාන මාතෘකාව අසලින් කුඩා Logo එකක්
-    st.image("image_0.png", width=120)
-with col_title:
-    st.title("📦 Picking Verification System")
-    st.write("Verification Portal")
+@st.cache_resource
+def get_gspread_client():
+    creds_dict = st.secrets["gcp_service_account"]
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    return gspread.authorize(creds)
 
-st.markdown("---")
+try:
+    client = get_gspread_client()
+    spreadsheet = client.open("streamlit_DB")
+    sheet = spreadsheet.worksheet("Sheet1")
+except Exception as e:
+    st.error(f"Error connecting to Google Sheets: {e}")
+    st.stop()
 
-# --- HELPER FUNCTION: CONVERT DF TO EXCEL ---
+# --- HELPER FUNCTION: DOWNLOAD TO EXCEL ---
 def to_excel(df):
     output = io.BytesIO()
     writer = pd.ExcelWriter(output, engine='xlsxwriter')
     df.to_excel(writer, index=False, sheet_name='Sheet1')
     writer.close()
-    processed_data = output.getvalue()
-    return processed_data
+    return output.getvalue()
 
-# --- GOOGLE SHEETS CONNECTION ---
-scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+# --- SIDEBAR NAVIGATION ---
+st.sidebar.image("efl_logo.png", use_container_width=True)
+st.sidebar.markdown("---")
+page = st.sidebar.radio("Navigation", ["📤 Upload Data", "🔍 Search & History", "🗑️ Manage Records"])
 
-with st.spinner('Connecting to Google Sheets...'):
-    try:
-        creds_dict = st.secrets["gcp_service_account"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        client = gspread.authorize(creds)
-        spreadsheet = client.open("streamlit_DB")
-        sheet = spreadsheet.worksheet("Sheet1")
-    except Exception as e:
-        st.error(f"Error connecting to Google Sheets: {e}")
-        st.stop()
+# --- MAIN HEADER ---
+col_logo, col_title = st.columns([0.15, 0.85])
+with col_logo:
+    st.image("efl_logo.png", width=100)
+with col_title:
+    st.title("Picking Verification System")
+    st.write("EFL Logistics | Verification Portal")
+st.markdown("---")
 
-# --- FILE UPLOADER ---
-uploaded_file = st.file_uploader("Excel file එක මෙතනට Upload කරන්න", type=["xlsx", "xls"], help="Drag and drop your daily picking excel file here.")
+# --- PAGE 1: UPLOAD DATA ---
+if page == "📤 Upload Data":
+    uploaded_file = st.file_uploader("Daily Excel File එක මෙතනට දාන්න", type=["xlsx", "xls"])
+    
+    if uploaded_file:
+        with st.spinner('Processing file...'):
+            new_df = pd.read_excel(uploaded_file)
+            existing_data = sheet.get_all_records()
+            existing_df = pd.DataFrame(existing_data)
 
-if uploaded_file:
-    with st.spinner('Processing File... 🔄'):
-        time.sleep(1) 
-        new_df = pd.read_excel(uploaded_file)
-        existing_rows = sheet.get_all_records()
-        existing_df = pd.DataFrame(existing_rows)
+        if 'Pallet' in new_df.columns:
+            duplicates = new_df[new_df['Pallet'].isin(existing_df['Pallet'])] if not existing_df.empty else pd.DataFrame()
 
-    if 'Pallet' in new_df.columns:
-        duplicate_pallets = []
-        if not existing_df.empty and 'Pallet' in existing_df.columns:
-            duplicate_pallets = existing_df[existing_df['Pallet'].isin(new_df['Pallet'])]
-
-        if len(duplicate_pallets) > 0:
-            st.error("⚠️ Duplicate Pallets හමු වුණා! (Duplicate Pallets Found)")
-            st.markdown("පහත දැක්වෙන්නේ දැනටමත් පද්ධතියේ ඇති Pallets වේ.")
-            
-            display_cols = ['Pallet', 'Actual Qty', 'Uom', 'Load Id']
-            available_cols = [col for col in display_cols if col in duplicate_pallets.columns]
-            
-            st.dataframe(duplicate_pallets[available_cols], use_container_width=True, height=200)
-
-            excel_data = to_excel(duplicate_pallets[available_cols])
-            st.download_button(
-                label="📥 Download Duplicate Data as Excel",
-                data=excel_data,
-                file_name='duplicate_pallets.xlsx',
-                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
-            st.markdown("---")
-            st.info("💡 ඔබට මෙම අලුත් දත්ත ඇතුළත් කිරීමට (Save) අවශ්‍යද?")
-            
-            col1, col2 = st.columns([0.2, 0.8])
-            with col1:
-                if st.button("✅ Yes, Save Data", type="primary"):
-                    with st.spinner('Saving data...'):
+            if not duplicates.empty:
+                st.error(f"⚠️ Duplicate Pallets {len(duplicates)} ක් හමු වුණා!")
+                st.dataframe(duplicates[['Pallet', 'Actual Qty', 'Load Id']], use_container_width=True)
+                
+                col_up1, col_up2 = st.columns(2)
+                with col_up1:
+                    if st.button("✅ Yes, Save Everything", type="primary"):
                         sheet.append_rows(new_df.astype(str).values.tolist())
-                    st.balloons() 
-                    st.success("දත්ත සාර්ථකව Save කළා!")
-            with col2:
-                if st.button("❌ No, Cancel"):
-                    st.warning("දත්ත Save කිරීම අවලංගු කළා.")
-        
-        else:
-            st.success("✅ No Duplicates Found. Ready to save.")
-            if st.button("Save Data Now", type="primary"):
-                 with st.spinner('Saving data...'):
+                        st.balloons(); st.success("දත්ත ඇතුළත් කළා!")
+                with col_up2:
+                    st.download_button("📥 Download Duplicates", data=to_excel(duplicates), file_name="duplicates.xlsx")
+            else:
+                st.success("✅ No duplicates found.")
+                if st.button("Save Data Now", type="primary"):
                     sheet.append_rows(new_df.astype(str).values.tolist())
-                 st.balloons() 
-                 st.success("අලුත් දත්ත සාර්ථකව ඇතුළත් කළා!")
+                    st.balloons(); st.success("දත්ත ඇතුළත් කළා!")
+        else:
+            st.error("වැරදි Format එකක්! 'Pallet' column එක පරීක්ෂා කරන්න.")
+
+# --- PAGE 2: SEARCH & HISTORY ---
+elif page == "🔍 Search & History":
+    st.subheader("🔍 Search & Day Summary")
+    
+    # Load all data
+    with st.spinner('Loading data from Google Sheets...'):
+        all_data = pd.DataFrame(sheet.get_all_records())
+
+    if not all_data.empty:
+        # Quick Statistics
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total Pallets", len(all_data))
+        c2.metric("Total Actual Qty", int(all_data['Actual Qty'].sum()))
+        c3.metric("Unique Load IDs", all_data['Load Id'].nunique())
+
+        st.markdown("---")
+        
+        # --- THE SEARCH BAR ---
+        search_query = st.text_input("Pallet ID, Load ID හෝ ඕනෑම විස්තරයක් ඇතුළත් කර සොයන්න (Search Anything)...")
+
+        if search_query:
+            # Case insensitive search across all columns
+            filtered_df = all_data[all_data.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)]
+            st.write(f"ප්‍රතිඵල: {len(filtered_df)}")
+            st.dataframe(filtered_df, use_container_width=True)
+        else:
+            st.write("අද දවසේ පද්ධතියට ඇතුළත් කළ සියලුම දත්ත:")
+            st.dataframe(all_data, use_container_width=True)
+
+        # Download option for filtered or full data
+        download_df = filtered_df if search_query else all_data
+        st.download_button("📥 Download Current View as Excel", data=to_excel(download_df), file_name="picking_report.xlsx")
     else:
-        st.error("🚫 වැරදි File Format එකක්! කරුණාකර 'Pallet' header එක සහිත file එකක් ලබාදෙන්න.")
+        st.info("පද්ධතියේ තවමත් දත්ත කිසිවක් නැත.")
+
+# --- PAGE 3: MANAGE RECORDS ---
+elif page == "🗑️ Manage Records":
+    st.subheader("🗑️ Delete Records")
+    all_data = pd.DataFrame(sheet.get_all_records())
+    
+    if not all_data.empty:
+        target_pallet = st.selectbox("මකා දැමිය යුතු Pallet ID එක තෝරන්න", ["-- Select --"] + all_data['Pallet'].astype(str).tolist())
+        
+        if target_pallet != "-- Select --":
+            row_to_delete = all_data[all_data['Pallet'].astype(str) == target_pallet]
+            st.table(row_to_delete)
+            
+            if st.button("🚨 Delete Permanently", type="secondary"):
+                with st.spinner('Deleting...'):
+                    cell = sheet.find(str(target_pallet))
+                    sheet.delete_rows(cell.row)
+                    st.success(f"Pallet {target_pallet} සාර්ථකව ඉවත් කළා!")
+                    time.sleep(1)
+                    st.rerun()
+    else:
+        st.info("මකා දැමීමට දත්ත නැත.")
 
 # --- FOOTER ---
-st.markdown(f"""
-    <div class="footer">
-        Developed by Ishanka Madusanka | 2026
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown(f'<div class="footer">Developed by Ishanka Madusanka | 2026</div>', unsafe_allow_html=True)
