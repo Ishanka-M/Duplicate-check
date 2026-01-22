@@ -1,8 +1,9 @@
 name: Daily Sheet Backup and Clear
+
 on:
   schedule:
-    - cron: '0 0 * * *' # UTC midnight (ලංකාවේ වෙලාවෙන් පාන්දර 5:30)
-  workflow_dispatch: # Manual run කිරීම සඳහා
+    - cron: '30 18 * * *' # ලංකාවේ වෙලාවෙන් රාත්‍රී 12:00 ට (UTC 18:30)
+  workflow_dispatch: # ඕනෑම වෙලාවක manual run කිරීමට පහසුකම
 
 jobs:
   backup-and-clear:
@@ -10,12 +11,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.x'
+
       - name: Install dependencies
-        run: pip install gspread google-auth
+        run: |
+          pip install gspread google-auth
+
       - name: Run Backup and Clear Script
         env:
           GCP_JSON: ${{ secrets.GCP_JSON }}
@@ -25,47 +30,48 @@ jobs:
           from google.oauth2.service_account import Credentials
           from datetime import datetime
 
-          # --- SETUP ---
-          info = json.loads(os.environ['GCP_JSON'])
-          creds = Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/spreadsheets'])
-          client = gspread.authorize(creds)
-          
-          # Sheet එක සම්බන්ධ කරගැනීම
-          SPREADSHEET_NAME = 'streamlit_DB'
-          MAIN_WORKSHEET = 'Sheet1'
-          
           try:
-              spreadsheet = client.open(SPREADSHEET_NAME)
-              source_sheet = spreadsheet.worksheet(MAIN_WORKSHEET)
+              # Secrets වලින් JSON දත්ත ලබා ගැනීම
+              info = json.loads(os.environ['GCP_JSON'])
               
-              # --- BACKUP PROCESS ---
-              print('Reading data for backup...')
+              # 403 Error එක විසඳීමට Spreadsheets සහ Drive යන Scopes දෙකම ඇතුළත් කිරීම
+              scopes = [
+                  'https://www.googleapis.com/auth/spreadsheets',
+                  'https://www.googleapis.com/auth/drive'
+              ]
+              
+              creds = Credentials.from_service_account_info(info, scopes=scopes)
+              client = gspread.authorize(creds)
+              
+              # Google Sheet එක සම්බන්ධ කරගැනීම (නම හරියටම පරීක්ෂා කරන්න)
+              SPREADSHEET_NAME = 'streamlit_DB'
+              spreadsheet = client.open(SPREADSHEET_NAME)
+              source_sheet = spreadsheet.worksheet('Sheet1')
+              
+              # Backup සඳහා දත්ත කියවීම
               data = source_sheet.get_all_values()
               
-              # Header එකට අමතරව දත්ත තිබේ නම් පමණක් Backup කිරීම
               if len(data) > 1:
-                  today_str = datetime.now().strftime('%Y-%m-%d')
+                  # අද දිනය සහ වේලාව සහිත නමක් සෑදීම
+                  today_str = datetime.now().strftime('%Y-%m-%d_%H-%M')
                   backup_sheet_name = f'Backup_{today_str}'
                   
-                  try:
-                      # අලුත් Worksheet එකක් සාදා දත්ත ඇතුළත් කිරීම
-                      backup_sheet = spreadsheet.add_worksheet(title=backup_sheet_name, rows=len(data)+10, cols=len(data[0])+5)
-                      backup_sheet.update(data)
-                      print(f'✅ Backup created successfully: {backup_sheet_name}')
-                  except gspread.exceptions.APIError as e:
-                      print(f'⚠️ Backup sheet might already exist for today or error: {e}. Skipping backup creation.')
-
-                  # --- CLEAR PROCESS ---
-                  # ප්‍රධාන sheet එක clear කර header එක නැවත දැමීම
+                  print(f'Creating backup: {backup_sheet_name}...')
+                  
+                  # අලුත් Backup Worksheet එකක් සෑදීම
+                  backup_sheet = spreadsheet.add_worksheet(title=backup_sheet_name, rows=len(data)+10, cols=len(data[0])+5)
+                  backup_sheet.update(data)
+                  
+                  # ප්‍රධාන Sheet එක (Sheet1) Clear කර Header එක පමණක් ඉතිරි කිරීම
                   header = data[0]
                   source_sheet.clear()
                   source_sheet.append_row(header)
-                  print(f'✅ {MAIN_WORKSHEET} cleared successfully (Header preserved).')
                   
+                  print('✅ Backup and Clear process completed successfully!')
               else:
-                  print('ℹ️ No data found to backup. Sheet is already empty.')
+                  print('ℹ️ No data found to backup or clear.')
 
           except Exception as e:
-              print(f'❌ An error occurred: {e}')
-              exit(1) # Mark action as failed
+              print(f'❌ Error occurred: {e}')
+              exit(1)
           "
