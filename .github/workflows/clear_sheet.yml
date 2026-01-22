@@ -2,8 +2,8 @@ name: Daily Sheet Backup and Clear
 
 on:
   schedule:
-    - cron: '30 18 * * *' # ලංකාවේ වෙලාවෙන් රාත්‍රී 12:00 ට (UTC 18:30)
-  workflow_dispatch: # ඕනෑම වෙලාවක manual run කිරීමට පහසුකම
+    - cron: '30 18 * * *' # ලංකාවේ වෙලාවෙන් රාත්‍රී 12:00 (UTC 18:30)
+  workflow_dispatch: 
 
 jobs:
   backup-and-clear:
@@ -18,8 +18,7 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: |
-          pip install gspread google-auth
+        run: pip install gspread google-auth
 
       - name: Run Backup and Clear Script
         env:
@@ -31,10 +30,9 @@ jobs:
           from datetime import datetime
 
           try:
-              # Secrets වලින් JSON දත්ත ලබා ගැනීම
               info = json.loads(os.environ['GCP_JSON'])
               
-              # 403 Error එක විසඳීමට Spreadsheets සහ Drive යන Scopes දෙකම ඇතුළත් කිරීම
+              # අනිවාර්යයෙන්ම Drive සහ Spreadsheets යන scopes දෙකම මෙලෙස තිබිය යුතුයි
               scopes = [
                   'https://www.googleapis.com/auth/spreadsheets',
                   'https://www.googleapis.com/auth/drive'
@@ -43,35 +41,31 @@ jobs:
               creds = Credentials.from_service_account_info(info, scopes=scopes)
               client = gspread.authorize(creds)
               
-              # Google Sheet එක සම්බන්ධ කරගැනීම (නම හරියටම පරීක්ෂා කරන්න)
-              SPREADSHEET_NAME = 'streamlit_DB'
-              spreadsheet = client.open(SPREADSHEET_NAME)
+              # Google Sheet එක සම්බන්ධ කරගැනීම
+              spreadsheet = client.open('streamlit_DB')
               source_sheet = spreadsheet.worksheet('Sheet1')
               
-              # Backup සඳහා දත්ත කියවීම
               data = source_sheet.get_all_values()
               
               if len(data) > 1:
-                  # අද දිනය සහ වේලාව සහිත නමක් සෑදීම
+                  # Backup නම සැකසීම
                   today_str = datetime.now().strftime('%Y-%m-%d_%H-%M')
                   backup_sheet_name = f'Backup_{today_str}'
                   
-                  print(f'Creating backup: {backup_sheet_name}...')
+                  print(f'Creating Backup: {backup_sheet_name}')
                   
-                  # අලුත් Backup Worksheet එකක් සෑදීම
+                  # අලුත් worksheet එකක් සෑදීම (මෙයට Drive API අවසරය අවශ්‍යයි)
                   backup_sheet = spreadsheet.add_worksheet(title=backup_sheet_name, rows=len(data)+10, cols=len(data[0])+5)
                   backup_sheet.update(data)
                   
-                  # ප්‍රධාන Sheet එක (Sheet1) Clear කර Header එක පමණක් ඉතිරි කිරීම
+                  # Sheet1 Clear කිරීම
                   header = data[0]
                   source_sheet.clear()
                   source_sheet.append_row(header)
-                  
-                  print('✅ Backup and Clear process completed successfully!')
+                  print('✅ Successfully Backed up and Cleared!')
               else:
-                  print('ℹ️ No data found to backup or clear.')
-
+                  print('ℹ️ No data found to backup.')
           except Exception as e:
-              print(f'❌ Error occurred: {e}')
+              print(f'❌ Error: {e}')
               exit(1)
           "
