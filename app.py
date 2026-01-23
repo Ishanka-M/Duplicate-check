@@ -47,7 +47,6 @@ def to_excel(df):
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.image("efl_logo.png", use_container_width=True)
 st.sidebar.markdown("---")
-# Navigation එකට "⚙️ Admin Panel" එකතු කළා
 page = st.sidebar.radio("Navigation", ["📤 Upload Data", "🔍 Search & History", "🗑️ Manage Records", "⚙️ Admin Panel"])
 
 # --- MAIN HEADER ---
@@ -142,48 +141,64 @@ elif page == "🗑️ Manage Records":
     else:
         st.info("මකා දැමීමට දත්ත නැත.")
 
-# --- NEW PAGE: ADMIN PANEL (MANUAL BACKUP & CLEAR) ---
+# --- NEW PAGE: ADMIN PANEL WITH PASSWORD ---
 elif page == "⚙️ Admin Panel":
     st.subheader("⚙️ System Maintenance & Backup")
-    st.markdown("GitHub Auto-Backup එක සිදු නොවී ඇත්නම් පමණක් මෙය භාවිතා කරන්න.")
     
-    all_vals = sheet.get_all_values()
-    
-    if len(all_vals) > 1:
-        st.info(f"දැනට පද්ධතියේ Rows **{len(all_vals)-1}** ක් පවතී.")
-        
-        st.warning("⚠️ මෙහිදී දැනට පවතින සියලුම දත්ත අලුත් Sheet එකකට Backup වී Main Sheet එක Clear කරනු ලැබේ.")
-        
-        # වැරදීමකින් button එක එබීම වැළැක්වීමට check box එකක්
-        confirm_check = st.checkbox("දත්ත Backup කර Clear කිරීමට මම එකඟ වෙමි.")
-        
-        if st.button("🚀 Run Manual Backup & Clear Now", type="primary"):
-            if confirm_check:
-                try:
-                    with st.spinner('පද්ධතිය Backup කරමින් පවතී...'):
-                        # 1. Backup නම සෑදීම
-                        now_str = datetime.now().strftime('%Y-%m-%d_%H-%M')
-                        backup_name = f"Manual_Backup_{now_str}"
-                        
-                        # 2. අලුත් worksheet එකක් සාදා දත්ත copy කිරීම
-                        new_ws = spreadsheet.add_worksheet(title=backup_name, rows=len(all_vals)+10, cols=len(all_vals[0])+5)
-                        new_ws.update(all_vals)
-                        
-                        # 3. ප්‍රධාන sheet එකේ දත්ත මැකීම (Header එක තබාගෙන)
-                        header = all_vals[0]
-                        sheet.clear()
-                        sheet.append_row(header)
-                        
-                        st.balloons()
-                        st.success(f"සාර්ථකයි! '{backup_name}' නමින් දත්ත සුරැකි අතර පද්ධතිය Reset කරන ලදී.")
-                        time.sleep(2)
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+    # Password authentication
+    if 'admin_authenticated' not in st.session_state:
+        st.session_state['admin_authenticated'] = False
+
+    if not st.session_state['admin_authenticated']:
+        # Password එක මෙතනින් වෙනස් කරගන්න
+        password_input = st.text_input("Admin Password එක ඇතුළත් කරන්න:", type="password")
+        if st.button("Login"):
+            if password_input == "efl123":
+                st.session_state['admin_authenticated'] = True
+                st.rerun()
             else:
-                st.error("කරුණාකර ඉහත Checkbox එක මත ක්ලික් කර තහවුරු කරන්න.")
+                st.error("වැරදි මුරපදයක්! කරුණාකර නැවත උත්සාහ කරන්න.")
     else:
-        st.info("Backup කිරීමට හෝ Clear කිරීමට දත්ත පද්ධතියේ නැත.")
+        # Logout button
+        if st.sidebar.button("Logout from Admin"):
+            st.session_state['admin_authenticated'] = False
+            st.rerun()
+
+        st.success("සාර්ථකව Login විය!")
+        st.markdown("GitHub Auto-Backup එක සිදු නොවී ඇත්නම් පමණක් මෙය භාවිතා කරන්න.")
+        
+        all_vals = sheet.get_all_values()
+        
+        if len(all_vals) > 1:
+            st.info(f"දැනට පද්ධතියේ Rows **{len(all_vals)-1}** ක් පවතී.")
+            st.warning("⚠️ මෙහිදී දැනට පවතින සියලුම දත්ත අලුත් Sheet එකකට Backup වී Main Sheet එක Clear කරනු ලැබේ.")
+            
+            confirm_check = st.checkbox("දත්ත Backup කර Clear කිරීමට මම එකඟ වෙමි.")
+            
+            if st.button("🚀 Run Manual Backup & Clear Now", type="primary"):
+                if confirm_check:
+                    try:
+                        with st.spinner('පද්ධතිය Backup කරමින් පවතී...'):
+                            now_str = datetime.now().strftime('%Y-%m-%d_%H-%M')
+                            backup_name = f"Manual_Backup_{now_str}"
+                            
+                            new_ws = spreadsheet.add_worksheet(title=backup_name, rows=len(all_vals)+10, cols=len(all_vals[0])+5)
+                            new_ws.update(all_vals)
+                            
+                            header = all_vals[0]
+                            sheet.clear()
+                            sheet.append_row(header)
+                            
+                            st.balloons()
+                            st.success(f"සාර්ථකයි! '{backup_name}' නමින් දත්ත සුරැකි අතර පද්ධතිය Reset කරන ලදී.")
+                            time.sleep(2)
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+                else:
+                    st.error("කරුණාකර ඉහත Checkbox එක මත ක්ලික් කර තහවුරු කරන්න.")
+        else:
+            st.info("Backup කිරීමට හෝ Clear කිරීමට දත්ත පද්ධතියේ නැත.")
 
 # --- FOOTER ---
 st.markdown(f'<div class="footer">Developed by Ishanka Madusanka | 2026</div>', unsafe_allow_html=True)
