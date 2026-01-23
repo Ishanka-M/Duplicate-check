@@ -4,6 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import io
 import time
+from datetime import datetime
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="EFL Picking Verification", page_icon="📦", layout="wide")
@@ -14,6 +15,7 @@ st.markdown("""
     .stDataFrame { border: 1px solid #393e46; border-radius: 10px; }
     .footer { position: fixed; left: 0; bottom: 0; width: 100%; background-color: #222831; color: #888888; text-align: center; padding: 10px; font-size: 12px; z-index: 100; }
     .metric-card { background-color: #1e2129; padding: 15px; border-radius: 10px; text-align: center; }
+    .stButton button { width: 100%; border-radius: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -45,7 +47,8 @@ def to_excel(df):
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.image("efl_logo.png", use_container_width=True)
 st.sidebar.markdown("---")
-page = st.sidebar.radio("Navigation", ["📤 Upload Data", "🔍 Search & History", "🗑️ Manage Records"])
+# Navigation එකට "⚙️ Admin Panel" එකතු කළා
+page = st.sidebar.radio("Navigation", ["📤 Upload Data", "🔍 Search & History", "🗑️ Manage Records", "⚙️ Admin Panel"])
 
 # --- MAIN HEADER ---
 col_logo, col_title = st.columns([0.15, 0.85])
@@ -92,24 +95,19 @@ if page == "📤 Upload Data":
 elif page == "🔍 Search & History":
     st.subheader("🔍 Search & Day Summary")
     
-    # Load all data
     with st.spinner('Loading data from Google Sheets...'):
         all_data = pd.DataFrame(sheet.get_all_records())
 
     if not all_data.empty:
-        # Quick Statistics
         c1, c2, c3 = st.columns(3)
         c1.metric("Total Pallets", len(all_data))
         c2.metric("Total Actual Qty", int(all_data['Actual Qty'].sum()))
         c3.metric("Unique Load IDs", all_data['Load Id'].nunique())
 
         st.markdown("---")
-        
-        # --- THE SEARCH BAR ---
-        search_query = st.text_input("Pallet ID, Load ID හෝ ඕනෑම විස්තරයක් ඇතුළත් කර සොයන්න (Search Anything)...")
+        search_query = st.text_input("Pallet ID, Load ID හෝ ඕනෑම විස්තරයක් ඇතුළත් කර සොයන්න...")
 
         if search_query:
-            # Case insensitive search across all columns
             filtered_df = all_data[all_data.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)]
             st.write(f"ප්‍රතිඵල: {len(filtered_df)}")
             st.dataframe(filtered_df, use_container_width=True)
@@ -117,7 +115,6 @@ elif page == "🔍 Search & History":
             st.write("අද දවසේ පද්ධතියට ඇතුළත් කළ සියලුම දත්ත:")
             st.dataframe(all_data, use_container_width=True)
 
-        # Download option for filtered or full data
         download_df = filtered_df if search_query else all_data
         st.download_button("📥 Download Current View as Excel", data=to_excel(download_df), file_name="picking_report.xlsx")
     else:
@@ -144,6 +141,49 @@ elif page == "🗑️ Manage Records":
                     st.rerun()
     else:
         st.info("මකා දැමීමට දත්ත නැත.")
+
+# --- NEW PAGE: ADMIN PANEL (MANUAL BACKUP & CLEAR) ---
+elif page == "⚙️ Admin Panel":
+    st.subheader("⚙️ System Maintenance & Backup")
+    st.markdown("GitHub Auto-Backup එක සිදු නොවී ඇත්නම් පමණක් මෙය භාවිතා කරන්න.")
+    
+    all_vals = sheet.get_all_values()
+    
+    if len(all_vals) > 1:
+        st.info(f"දැනට පද්ධතියේ Rows **{len(all_vals)-1}** ක් පවතී.")
+        
+        st.warning("⚠️ මෙහිදී දැනට පවතින සියලුම දත්ත අලුත් Sheet එකකට Backup වී Main Sheet එක Clear කරනු ලැබේ.")
+        
+        # වැරදීමකින් button එක එබීම වැළැක්වීමට check box එකක්
+        confirm_check = st.checkbox("දත්ත Backup කර Clear කිරීමට මම එකඟ වෙමි.")
+        
+        if st.button("🚀 Run Manual Backup & Clear Now", type="primary"):
+            if confirm_check:
+                try:
+                    with st.spinner('පද්ධතිය Backup කරමින් පවතී...'):
+                        # 1. Backup නම සෑදීම
+                        now_str = datetime.now().strftime('%Y-%m-%d_%H-%M')
+                        backup_name = f"Manual_Backup_{now_str}"
+                        
+                        # 2. අලුත් worksheet එකක් සාදා දත්ත copy කිරීම
+                        new_ws = spreadsheet.add_worksheet(title=backup_name, rows=len(all_vals)+10, cols=len(all_vals[0])+5)
+                        new_ws.update(all_vals)
+                        
+                        # 3. ප්‍රධාන sheet එකේ දත්ත මැකීම (Header එක තබාගෙන)
+                        header = all_vals[0]
+                        sheet.clear()
+                        sheet.append_row(header)
+                        
+                        st.balloons()
+                        st.success(f"සාර්ථකයි! '{backup_name}' නමින් දත්ත සුරැකි අතර පද්ධතිය Reset කරන ලදී.")
+                        time.sleep(2)
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+            else:
+                st.error("කරුණාකර ඉහත Checkbox එක මත ක්ලික් කර තහවුරු කරන්න.")
+    else:
+        st.info("Backup කිරීමට හෝ Clear කිරීමට දත්ත පද්ධතියේ නැත.")
 
 # --- FOOTER ---
 st.markdown(f'<div class="footer">Developed by Ishanka Madusanka | 2026</div>', unsafe_allow_html=True)
