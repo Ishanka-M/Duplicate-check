@@ -69,26 +69,43 @@ if page == "📤 Upload Data":
             existing_df = pd.DataFrame(existing_data)
 
         if 'Pallet' in new_df.columns:
-            duplicates = new_df[new_df['Pallet'].isin(existing_df['Pallet'])] if not existing_df.empty else pd.DataFrame()
+            # පද්ධතියේ දැනට පවතින Pallets සමග සසඳා duplicate සොයා ගැනීම
+            duplicate_pallets = new_df[new_df['Pallet'].isin(existing_df['Pallet'])]['Pallet'].tolist()
 
-            if not duplicates.empty:
-                st.error(f"⚠️ Duplicate Pallets {len(duplicates)} ක් හමු වුණා!")
-                st.dataframe(duplicates[['Pallet', 'Actual Qty', 'Load Id']], use_container_width=True)
+            if duplicate_pallets:
+                # දැනට පද්ධතියේ (Sheet එකේ) ඇති අදාළ දත්ත ලබා ගැනීම
+                existing_duplicates = existing_df[existing_df['Pallet'].isin(duplicate_pallets)]
+                
+                # 'Load Id' එක මුලට එන සේ column order එක වෙනස් කිරීම
+                cols = ['Load Id'] + [col for col in existing_duplicates.columns if col != 'Load Id']
+                existing_duplicates = existing_duplicates[cols]
+
+                st.error(f"⚠️ පද්ධතියේ දැනටමත් පවතින (Duplicate) Pallets {len(existing_duplicates)} ක් හමු වුණා!")
+                
+                st.markdown("### 📋 පද්ධතියේ දැනට පවතින විස්තර (Existing Records)")
+                st.write("මෙහි Load ID එක මුලින්ම දක්වා ඇත:")
+                st.dataframe(existing_duplicates, use_container_width=True)
                 
                 col_up1, col_up2 = st.columns(2)
                 with col_up1:
-                    if st.button("✅ Yes, Save Everything", type="primary"):
+                    if st.button("✅ Yes, Save Everything (Ignore Duplicates)", type="primary"):
                         sheet.append_rows(new_df.astype(str).values.tolist())
-                        st.balloons(); st.success("දත්ත ඇතුළත් කළා!")
+                        st.balloons()
+                        st.success("සියලුම දත්ත ඇතුළත් කළා!")
                 with col_up2:
-                    st.download_button("📥 Download Duplicates", data=to_excel(duplicates), file_name="duplicates.xlsx")
+                    # Duplicate වුණු දත්ත පමණක් Excel එකක් ලෙස download කර ගැනීමට
+                    st.download_button("📥 Download Duplicate Details", 
+                                     data=to_excel(existing_duplicates), 
+                                     file_name="existing_duplicates.xlsx")
             else:
                 st.success("✅ No duplicates found.")
                 if st.button("Save Data Now", type="primary"):
                     sheet.append_rows(new_df.astype(str).values.tolist())
-                    st.balloons(); st.success("දත්ත ඇතුළත් කළා!")
+                    st.balloons()
+                    st.success("දත්ත ඇතුළත් කළා!")
         else:
             st.error("වැරදි Format එකක්! 'Pallet' column එක පරීක්ෂා කරන්න.")
+
 
 # --- PAGE 2: SEARCH & HISTORY ---
 elif page == "🔍 Search & History":
